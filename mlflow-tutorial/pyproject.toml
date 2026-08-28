@@ -1,0 +1,11 @@
+[project]
+name = "mlflow-tutorial"
+version = "0.1.0"
+requires-python = ">=3.13"
+dependencies = [
+    "marimo==0.24.0",
+    "mlflow==3.15.2",
+    "optuna==4.9.0",
+    "pandas==2.3.3",
+    "scikit-learn==1.8.0",
+]

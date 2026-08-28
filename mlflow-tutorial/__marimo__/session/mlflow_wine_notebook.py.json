@@ -1,0 +1,394 @@
+{
+  "version": "1",
+  "metadata": {
+    "marimo_version": "0.24.0",
+    "script_metadata_hash": null
+  },
+  "cells": [
+    {
+      "id": "Hbol",
+      "code_hash": "1d0db38904205bec4d6f6f6a1f6cec3e",
+      "outputs": [
+        {
+          "type": "data",
+          "data": {
+            "text/plain": ""
+          }
+        }
+      ],
+      "console": []
+    },
+    {
+      "id": "MJUe",
+      "code_hash": "9a18dbe74a116906415dfc71d24145e0",
+      "outputs": [
+        {
+          "type": "data",
+          "data": {
+            "text/markdown": "<span class=\"markdown prose dark:prose-invert contents\"><h1 id=\"mlflow-scikit-learn-tracking-logging-and-tuning\">MLflow + scikit-learn: tracking, logging, and tuning</h1>\n<span class=\"paragraph\">This notebook walks through three things, each in its own section:</span>\n<ol>\n<li><strong>Load</strong> the classic Wine dataset.</li>\n<li><strong>Train + log</strong> a single scikit-learn model with MLflow (the \"one run\" pattern).</li>\n<li><strong>Tune</strong> that model with Optuna, logging every trial as its own MLflow run, then\n   picking and re-logging the best one.</li>\n</ol>\n<span class=\"paragraph\">The core idea behind MLflow here: every time you train something, wrap it in\n<code>mlflow.start_run()</code> and log three things \u2014 the <strong>parameters</strong> that produced the\nmodel, the <strong>metrics</strong> that resulted, and the <strong>model artifact</strong> itself. That turns\n\"I ran some experiments\" into a queryable, comparable history.</span></span>"
+          }
+        }
+      ],
+      "console": []
+    },
+    {
+      "id": "vblA",
+      "code_hash": "8e2bd20b3f197c71224c77b58efb11ec",
+      "outputs": [
+        {
+          "type": "data",
+          "data": {
+            "text/markdown": "<span class=\"markdown prose dark:prose-invert contents\"><h2 id=\"section-0-setup\">Section 0 \u2014 Setup</h2>\n<span class=\"paragraph\">Two choices matter here:</span>\n<ul>\n<li><strong>Tracking URI</strong>: where MLflow stores run data. The default is a local\n  <code>mlruns/</code> folder using flat files. We instead point it at a local <strong>SQLite</strong>\n  database (<code>sqlite:///mlflow.db</code>). This costs nothing extra locally, but it\n  unlocks the <strong>Model Registry</strong> (<code>registered_model_name=...</code>), which the flat-file\n  store doesn't support. If you don't need the registry, <code>mlruns/</code> is fine too.</li>\n<li><strong>Experiment</strong>: a named container for runs. Grouping runs under one experiment\n  (<code>wine-classification</code>) is what lets us later query \"all runs from this\n  experiment\" and compare them.</li>\n</ul></span>"
+          }
+        }
+      ],
+      "console": []
+    },
+    {
+      "id": "bkHC",
+      "code_hash": "c70655d8c134cf24d26f649a74a2ef1a",
+      "outputs": [
+        {
+          "type": "data",
+          "data": {
+            "text/plain": ""
+          }
+        }
+      ],
+      "console": [
+        {
+          "type": "stream",
+          "name": "stderr",
+          "text": "2026/08/27 18:58:38 INFO mlflow.store.db.utils: Creating initial MLflow database tables...\n2026/08/27 18:58:38 INFO mlflow.store.db.utils: Updating database tables\n2026/08/27 18:58:39 INFO mlflow.tracking.fluent: Experiment with name 'wine-classification' does not exist. Creating a new experiment.\n",
+          "mimetype": "text/plain"
+        }
+      ]
+    },
+    {
+      "id": "lEQa",
+      "code_hash": "6d9e17d90aa03b25c3a3cb02b2eb8bc5",
+      "outputs": [
+        {
+          "type": "data",
+          "data": {
+            "text/markdown": "<span class=\"markdown prose dark:prose-invert contents\"><h2 id=\"section-1-load-the-wine-dataset\">Section 1 \u2014 Load the Wine dataset</h2>\n<span class=\"paragraph\">The <a href=\"https://scikit-learn.org/stable/datasets/toy_dataset.html#wine-dataset\" rel=\"noopener noreferrer\" target=\"_blank\">Wine dataset</a>\nis a small, classic multiclass classification problem: 178 samples, 13 numeric\nfeatures from a chemical analysis of wines, and 3 target classes (cultivars).\nIt's a good \"boring\" dataset for an MLflow example, since we don't have to spend\nany time on data cleaning and can focus entirely on the tracking mechanics.</span></span>"
+          }
+        }
+      ],
+      "console": []
+    },
+    {
+      "id": "PKri",
+      "code_hash": "a353f585968aba4d45e7d971d89c2e68",
+      "outputs": [
+        {
+          "type": "data",
+          "data": {
+            "text/plain": ""
+          }
+        }
+      ],
+      "console": []
+    },
+    {
+      "id": "Xref",
+      "code_hash": "02129bb861061d1a052c592e2dc6b383",
+      "outputs": [
+        {
+          "type": "data",
+          "data": {
+            "text/html": "<marimo-ui-element object-id='Xref-0' random-id='78864d0e-ae77-dd02-e542-14767901d0b4'><marimo-table data-initial-value='[]' data-label='null' data-data='&quot;[{&#92;&quot;alcohol&#92;&quot;:14.23,&#92;&quot;malic_acid&#92;&quot;:1.71,&#92;&quot;ash&#92;&quot;:2.43,&#92;&quot;alcalinity_of_ash&#92;&quot;:15.6,&#92;&quot;magnesium&#92;&quot;:127.0,&#92;&quot;total_phenols&#92;&quot;:2.8,&#92;&quot;flavanoids&#92;&quot;:3.06,&#92;&quot;nonflavanoid_phenols&#92;&quot;:0.28,&#92;&quot;proanthocyanins&#92;&quot;:2.29,&#92;&quot;color_intensity&#92;&quot;:5.64,&#92;&quot;hue&#92;&quot;:1.04,&#92;&quot;od280/od315_of_diluted_wines&#92;&quot;:3.92,&#92;&quot;proline&#92;&quot;:1065.0},{&#92;&quot;alcohol&#92;&quot;:13.2,&#92;&quot;malic_acid&#92;&quot;:1.78,&#92;&quot;ash&#92;&quot;:2.14,&#92;&quot;alcalinity_of_ash&#92;&quot;:11.2,&#92;&quot;magnesium&#92;&quot;:100.0,&#92;&quot;total_phenols&#92;&quot;:2.65,&#92;&quot;flavanoids&#92;&quot;:2.76,&#92;&quot;nonflavanoid_phenols&#92;&quot;:0.26,&#92;&quot;proanthocyanins&#92;&quot;:1.28,&#92;&quot;color_intensity&#92;&quot;:4.38,&#92;&quot;hue&#92;&quot;:1.05,&#92;&quot;od280/od315_of_diluted_wines&#92;&quot;:3.4,&#92;&quot;proline&#92;&quot;:1050.0},{&#92;&quot;alcohol&#92;&quot;:13.16,&#92;&quot;malic_acid&#92;&quot;:2.36,&#92;&quot;ash&#92;&quot;:2.67,&#92;&quot;alcalinity_of_ash&#92;&quot;:18.6,&#92;&quot;magnesium&#92;&quot;:101.0,&#92;&quot;total_phenols&#92;&quot;:2.8,&#92;&quot;flavanoids&#92;&quot;:3.24,&#92;&quot;nonflavanoid_phenols&#92;&quot;:0.3,&#92;&quot;proanthocyanins&#92;&quot;:2.81,&#92;&quot;color_intensity&#92;&quot;:5.68,&#92;&quot;hue&#92;&quot;:1.03,&#92;&quot;od280/od315_of_diluted_wines&#92;&quot;:3.17,&#92;&quot;proline&#92;&quot;:1185.0},{&#92;&quot;alcohol&#92;&quot;:14.37,&#92;&quot;malic_acid&#92;&quot;:1.95,&#92;&quot;ash&#92;&quot;:2.5,&#92;&quot;alcalinity_of_ash&#92;&quot;:16.8,&#92;&quot;magnesium&#92;&quot;:113.0,&#92;&quot;total_phenols&#92;&quot;:3.85,&#92;&quot;flavanoids&#92;&quot;:3.49,&#92;&quot;nonflavanoid_phenols&#92;&quot;:0.24,&#92;&quot;proanthocyanins&#92;&quot;:2.18,&#92;&quot;color_intensity&#92;&quot;:7.8,&#92;&quot;hue&#92;&quot;:0.86,&#92;&quot;od280/od315_of_diluted_wines&#92;&quot;:3.45,&#92;&quot;proline&#92;&quot;:1480.0},{&#92;&quot;alcohol&#92;&quot;:13.24,&#92;&quot;malic_acid&#92;&quot;:2.59,&#92;&quot;ash&#92;&quot;:2.87,&#92;&quot;alcalinity_of_ash&#92;&quot;:21.0,&#92;&quot;magnesium&#92;&quot;:118.0,&#92;&quot;total_phenols&#92;&quot;:2.8,&#92;&quot;flavanoids&#92;&quot;:2.69,&#92;&quot;nonflavanoid_phenols&#92;&quot;:0.39,&#92;&quot;proanthocyanins&#92;&quot;:1.82,&#92;&quot;color_intensity&#92;&quot;:4.32,&#92;&quot;hue&#92;&quot;:1.04,&#92;&quot;od280/od315_of_diluted_wines&#92;&quot;:2.93,&#92;&quot;proline&#92;&quot;:735.0},{&#92;&quot;alcohol&#92;&quot;:14.2,&#92;&quot;malic_acid&#92;&quot;:1.76,&#92;&quot;ash&#92;&quot;:2.45,&#92;&quot;alcalinity_of_ash&#92;&quot;:15.2,&#92;&quot;magnesium&#92;&quot;:112.0,&#92;&quot;total_phenols&#92;&quot;:3.27,&#92;&quot;flavanoids&#92;&quot;:3.39,&#92;&quot;nonflavanoid_phenols&#92;&quot;:0.34,&#92;&quot;proanthocyanins&#92;&quot;:1.97,&#92;&quot;color_intensity&#92;&quot;:6.75,&#92;&quot;hue&#92;&quot;:1.05,&#92;&quot;od280/od315_of_diluted_wines&#92;&quot;:2.85,&#92;&quot;proline&#92;&quot;:1450.0},{&#92;&quot;alcohol&#92;&quot;:14.39,&#92;&quot;malic_acid&#92;&quot;:1.87,&#92;&quot;ash&#92;&quot;:2.45,&#92;&quot;alcalinity_of_ash&#92;&quot;:14.6,&#92;&quot;magnesium&#92;&quot;:96.0,&#92;&quot;total_phenols&#92;&quot;:2.5,&#92;&quot;flavanoids&#92;&quot;:2.52,&#92;&quot;nonflavanoid_phenols&#92;&quot;:0.3,&#92;&quot;proanthocyanins&#92;&quot;:1.98,&#92;&quot;color_intensity&#92;&quot;:5.25,&#92;&quot;hue&#92;&quot;:1.02,&#92;&quot;od280/od315_of_diluted_wines&#92;&quot;:3.58,&#92;&quot;proline&#92;&quot;:1290.0},{&#92;&quot;alcohol&#92;&quot;:14.06,&#92;&quot;malic_acid&#92;&quot;:2.15,&#92;&quot;ash&#92;&quot;:2.61,&#92;&quot;alcalinity_of_ash&#92;&quot;:17.6,&#92;&quot;magnesium&#92;&quot;:121.0,&#92;&quot;total_phenols&#92;&quot;:2.6,&#92;&quot;flavanoids&#92;&quot;:2.51,&#92;&quot;nonflavanoid_phenols&#92;&quot;:0.31,&#92;&quot;proanthocyanins&#92;&quot;:1.25,&#92;&quot;color_intensity&#92;&quot;:5.05,&#92;&quot;hue&#92;&quot;:1.06,&#92;&quot;od280/od315_of_diluted_wines&#92;&quot;:3.58,&#92;&quot;proline&#92;&quot;:1295.0},{&#92;&quot;alcohol&#92;&quot;:14.83,&#92;&quot;malic_acid&#92;&quot;:1.64,&#92;&quot;ash&#92;&quot;:2.17,&#92;&quot;alcalinity_of_ash&#92;&quot;:14.0,&#92;&quot;magnesium&#92;&quot;:97.0,&#92;&quot;total_phenols&#92;&quot;:2.8,&#92;&quot;flavanoids&#92;&quot;:2.98,&#92;&quot;nonflavanoid_phenols&#92;&quot;:0.29,&#92;&quot;proanthocyanins&#92;&quot;:1.98,&#92;&quot;color_intensity&#92;&quot;:5.2,&#92;&quot;hue&#92;&quot;:1.08,&#92;&quot;od280/od315_of_diluted_wines&#92;&quot;:2.85,&#92;&quot;proline&#92;&quot;:1045.0},{&#92;&quot;alcohol&#92;&quot;:13.86,&#92;&quot;malic_acid&#92;&quot;:1.35,&#92;&quot;ash&#92;&quot;:2.27,&#92;&quot;alcalinity_of_ash&#92;&quot;:16.0,&#92;&quot;magnesium&#92;&quot;:98.0,&#92;&quot;total_phenols&#92;&quot;:2.98,&#92;&quot;flavanoids&#92;&quot;:3.15,&#92;&quot;nonflavanoid_phenols&#92;&quot;:0.22,&#92;&quot;proanthocyanins&#92;&quot;:1.85,&#92;&quot;color_intensity&#92;&quot;:7.22,&#92;&quot;hue&#92;&quot;:1.01,&#92;&quot;od280/od315_of_diluted_wines&#92;&quot;:3.55,&#92;&quot;proline&#92;&quot;:1045.0}]&quot;' data-total-rows='178' data-total-columns='13' data-max-columns='50' data-banner-text='&quot;&quot;' data-pagination='true' data-page-size='10' data-field-types='[[&quot;alcohol&quot;,[&quot;number&quot;,&quot;float64&quot;]],[&quot;malic_acid&quot;,[&quot;number&quot;,&quot;float64&quot;]],[&quot;ash&quot;,[&quot;number&quot;,&quot;float64&quot;]],[&quot;alcalinity_of_ash&quot;,[&quot;number&quot;,&quot;float64&quot;]],[&quot;magnesium&quot;,[&quot;number&quot;,&quot;float64&quot;]],[&quot;total_phenols&quot;,[&quot;number&quot;,&quot;float64&quot;]],[&quot;flavanoids&quot;,[&quot;number&quot;,&quot;float64&quot;]],[&quot;nonflavanoid_phenols&quot;,[&quot;number&quot;,&quot;float64&quot;]],[&quot;proanthocyanins&quot;,[&quot;number&quot;,&quot;float64&quot;]],[&quot;color_intensity&quot;,[&quot;number&quot;,&quot;float64&quot;]],[&quot;hue&quot;,[&quot;number&quot;,&quot;float64&quot;]],[&quot;od280/od315_of_diluted_wines&quot;,[&quot;number&quot;,&quot;float64&quot;]],[&quot;proline&quot;,[&quot;number&quot;,&quot;float64&quot;]]]' data-show-filters='true' data-show-download='true' data-show-search='true' data-show-column-summaries='true' data-show-data-types='true' data-show-page-size-selector='true' data-show-column-explorer='true' data-show-chart-builder='true' data-row-headers='[]' data-hidden-columns='[]' data-has-stable-row-id='false' data-lazy='false' data-preload='false'></marimo-table></marimo-ui-element>"
+          }
+        }
+      ],
+      "console": []
+    },
+    {
+      "id": "SFPL",
+      "code_hash": "8eba90ee8c1a2707f993d9cca5b352dc",
+      "outputs": [
+        {
+          "type": "data",
+          "data": {
+            "text/html": "<marimo-ui-element object-id='SFPL-0' random-id='b609e150-e805-c7d8-dcc7-c48e75c8f458'><marimo-table data-initial-value='[]' data-label='null' data-data='&quot;[{&#92;&quot;n_samples&#92;&quot;:178,&#92;&quot;n_features&#92;&quot;:13,&#92;&quot;n_classes&#92;&quot;:3}]&quot;' data-total-rows='1' data-total-columns='3' data-max-columns='50' data-banner-text='&quot;&quot;' data-pagination='false' data-page-size='10' data-field-types='[[&quot;n_samples&quot;,[&quot;integer&quot;,&quot;int64&quot;]],[&quot;n_features&quot;,[&quot;integer&quot;,&quot;int64&quot;]],[&quot;n_classes&quot;,[&quot;integer&quot;,&quot;int64&quot;]]]' data-show-filters='true' data-show-download='true' data-show-search='true' data-show-column-summaries='false' data-show-data-types='true' data-show-page-size-selector='false' data-show-column-explorer='true' data-show-chart-builder='true' data-row-headers='[]' data-hidden-columns='[]' data-has-stable-row-id='false' data-lazy='false' data-preload='false'></marimo-table></marimo-ui-element>"
+          }
+        }
+      ],
+      "console": []
+    },
+    {
+      "id": "BYtC",
+      "code_hash": "cbbeb1bb3d9817dc1cce94ba8be449b4",
+      "outputs": [
+        {
+          "type": "data",
+          "data": {
+            "text/html": "<pre class='text-xs'>array([&#x27;class_0&#x27;, &#x27;class_1&#x27;, &#x27;class_2&#x27;], dtype=&#x27;&lt;U7&#x27;)</pre>"
+          }
+        }
+      ],
+      "console": []
+    },
+    {
+      "id": "RGSE",
+      "code_hash": "d5c3ddd20aa731568b734e2713a6e7aa",
+      "outputs": [
+        {
+          "type": "data",
+          "data": {
+            "text/plain": ""
+          }
+        }
+      ],
+      "console": []
+    },
+    {
+      "id": "Kclp",
+      "code_hash": "3a5b8171295331d319423ac47aa485f8",
+      "outputs": [
+        {
+          "type": "data",
+          "data": {
+            "text/markdown": "<span class=\"markdown prose dark:prose-invert contents\"><h2 id=\"section-2-basic-training-logging-with-mlflow\">Section 2 \u2014 Basic training + logging with MLflow</h2>\n<span class=\"paragraph\">The pattern below is the same for almost any scikit-learn model:</span>\n<ol>\n<li>Open a run with <code>mlflow.start_run()</code>.</li>\n<li><code>mlflow.log_params(...)</code> \u2014 log the hyperparameters <em>before</em> training, so a run\n   is fully described even if training later fails.</li>\n<li>Fit the model as usual.</li>\n<li><code>mlflow.log_metrics(...)</code> \u2014 log whatever you compute on the held-out set.</li>\n<li><code>mlflow.sklearn.log_model(...)</code> \u2014 log the fitted estimator itself as an\n   artifact. This is what lets you reload the exact model later with\n   <code>mlflow.sklearn.load_model(...)</code>, without re-running any training code.</li>\n</ol>\n<span class=\"paragraph\">We'll use a <code>DecisionTreeClassifier</code> here since it's simple and its\nhyperparameters (<code>max_depth</code>, <code>criterion</code>, ...) are easy to reason about \u2014 good\nfor a first example before we hand tuning off to Optuna in Section 3.</span></span>"
+          }
+        }
+      ],
+      "console": []
+    },
+    {
+      "id": "emfo",
+      "code_hash": "215505c140456bffad694bcb06b3cc36",
+      "outputs": [
+        {
+          "type": "data",
+          "data": {
+            "application/json": "{\"accuracy\": \"text/plain+float:0.9444444444444444\", \"f1_macro\": \"text/plain+float:0.9458874458874459\", \"precision_macro\": \"text/plain+float:0.9555555555555556\", \"recall_macro\": \"text/plain+float:0.9444444444444445\"}"
+          }
+        }
+      ],
+      "console": [
+        {
+          "type": "stream",
+          "name": "stderr",
+          "text": "2026/08/27 18:59:06 INFO mlflow.utils.uv_utils: Detected uv project: found uv.lock and pyproject.toml in /home/ale/projects/mlflow-tutorial\n/home/ale/projects/mlflow-tutorial/.venv/lib/python3.13/site-packages/mlflow/types/utils.py:440: UserWarning: Hint: Inferred schema contains integer column(s). Integer columns in Python cannot represent missing values. If your input data contains missing values at inference time, it will be encoded as floats and will cause a schema enforcement error. The best way to avoid this problem is to infer the model schema based on a realistic data sample (training dataset) that includes missing values. Alternatively, you can declare integer columns as doubles (float64) whenever these columns may have missing values. See `Handling Integers With Missing Values <https://www.mlflow.org/docs/latest/models.html#handling-integers-with-missing-values>`_ for more details.\n  warnings.warn(\n2026/08/27 18:59:10 INFO mlflow.utils.uv_utils: Detected uv project: found uv.lock and pyproject.toml in /home/ale/projects/mlflow-tutorial\n2026/08/27 18:59:10 INFO mlflow.utils.environment: Detected uv project at /home/ale/projects/mlflow-tutorial. Attempting to export requirements via 'uv export'.\n2026/08/27 18:59:10 INFO mlflow.utils.uv_utils: Exported 110 dependencies via uv\n2026/08/27 18:59:10 INFO mlflow.utils.environment: Successfully exported 110 requirements from uv project. Skipping package capture based inference.\n2026/08/27 18:59:10 WARNING mlflow.utils.environment: Failed to resolve installed pip version. ``pip`` will be added to conda.yaml environment spec without a version specifier.\n",
+          "mimetype": "text/plain"
+        }
+      ]
+    },
+    {
+      "id": "Hstk",
+      "code_hash": "f811b2b8c2051ef9d1697f3ba21e2ea1",
+      "outputs": [
+        {
+          "type": "data",
+          "data": {
+            "text/markdown": "<span class=\"markdown prose dark:prose-invert contents\"><span class=\"paragraph\">That run is now durably recorded. Instead of trusting the Python variable\n<code>baseline_metrics</code> still sitting in memory, let's pull it back <strong>from MLflow</strong>\nusing the run id \u2014 this is what \"logged\" buys you: the run survives even if\nyou restart this notebook.</span></span>"
+          }
+        }
+      ],
+      "console": []
+    },
+    {
+      "id": "nWHF",
+      "code_hash": "13dc1150c04899932fd057b7aba20189",
+      "outputs": [
+        {
+          "type": "data",
+          "data": {
+            "application/json": "[{\"max_depth\": \"4\", \"criterion\": \"gini\", \"random_state\": \"42\"}, {\"accuracy\": \"text/plain+float:0.9444444444444444\", \"f1_macro\": \"text/plain+float:0.9458874458874459\", \"precision_macro\": \"text/plain+float:0.9555555555555556\", \"recall_macro\": \"text/plain+float:0.9444444444444445\"}, []]"
+          }
+        }
+      ],
+      "console": []
+    },
+    {
+      "id": "iLit",
+      "code_hash": "7e4ff3b83f73c2468f5fd2b5ad1ecf5b",
+      "outputs": [
+        {
+          "type": "data",
+          "data": {
+            "text/markdown": "<span class=\"markdown prose dark:prose-invert contents\"><span class=\"paragraph\"><code>logged_artifacts</code> should show a <code>model</code> folder \u2014 that's the serialized\nestimator plus its metadata (conda/pip requirements, input signature, etc.),\neverything needed to reload it elsewhere with:</span>\n<div class=\"language-python codehilite\"><pre><span></span><code><span class=\"n\">mlflow</span><span class=\"o\">.</span><span class=\"n\">sklearn</span><span class=\"o\">.</span><span class=\"n\">load_model</span><span class=\"p\">(</span><span class=\"sa\">f</span><span class=\"s2\">\"runs:/</span><span class=\"si\">{</span><span class=\"n\">baseline_run_id</span><span class=\"si\">}</span><span class=\"s2\">/model\"</span><span class=\"p\">)</span>\n</code></pre></div></span>"
+          }
+        }
+      ],
+      "console": []
+    },
+    {
+      "id": "ZHCJ",
+      "code_hash": "7cbaf6dc3dc111778765b58540ecb296",
+      "outputs": [
+        {
+          "type": "data",
+          "data": {
+            "text/markdown": "<span class=\"markdown prose dark:prose-invert contents\"><h2 id=\"section-3-hyperparameter-tuning-with-optuna-mlflow\">Section 3 \u2014 Hyperparameter tuning with Optuna + MLflow</h2>\n<span class=\"paragraph\">The idea: let Optuna propose hyperparameter combinations, and log <strong>every trial\nas its own nested MLflow run</strong> under one parent run. Nesting matters for\norganization \u2014 later, you can filter \"give me all trials that belong to this\nspecific tuning session\" using <code>tags.mlflow.parentRunId</code>, instead of every trial\npolluting the top-level run list.</span>\n<span class=\"paragraph\">The objective function does the same 5 steps as Section 2 (log params \u2192 fit \u2192\nlog metrics), just wrapped in a function Optuna calls repeatedly, and it\n<code>return</code>s the metric Optuna should optimize.</span></span>"
+          }
+        }
+      ],
+      "console": []
+    },
+    {
+      "id": "ROlb",
+      "code_hash": "b106aac78585c11e1c008255d4ed0e70",
+      "outputs": [
+        {
+          "type": "data",
+          "data": {
+            "text/plain": ""
+          }
+        }
+      ],
+      "console": []
+    },
+    {
+      "id": "qnkX",
+      "code_hash": "e2bb67f37b49db62889e35a9a5e7a873",
+      "outputs": [
+        {
+          "type": "data",
+          "data": {
+            "application/json": "[\"text/plain+float:0.9458874458874459\", {\"max_depth\": 15, \"min_samples_split\": 5, \"min_samples_leaf\": 8, \"criterion\": \"entropy\"}]"
+          }
+        }
+      ],
+      "console": []
+    },
+    {
+      "id": "TqIu",
+      "code_hash": "5ab93f2eb925d3c8af64b1c04ae24e70",
+      "outputs": [
+        {
+          "type": "data",
+          "data": {
+            "text/markdown": "<span class=\"markdown prose dark:prose-invert contents\"><h3 id=\"comparing-all-trials\">Comparing all trials</h3>\n<span class=\"paragraph\">Rather than trusting the in-memory <code>study</code> object, we query MLflow for every run\nwhose parent is our tuning session, and sort by the metric we optimized. This is\nthe same query you'd run days later, in a different process, to see how a past\ntuning session went.</span></span>"
+          }
+        }
+      ],
+      "console": []
+    },
+    {
+      "id": "Vxnm",
+      "code_hash": "c736225f29d5477bc2233fd1c76b8a67",
+      "outputs": [
+        {
+          "type": "data",
+          "data": {
+            "text/html": "<marimo-ui-element object-id='Vxnm-0' random-id='b4a5e302-e785-1b4c-4a2c-38feb9a053cb'><marimo-table data-initial-value='[]' data-label='null' data-data='&quot;[{&#92;&quot;run_id&#92;&quot;:&#92;&quot;ef2705cbf7d94648a3a110b2cd833476&#92;&quot;,&#92;&quot;params.max_depth&#92;&quot;:&#92;&quot;17&#92;&quot;,&#92;&quot;params.min_samples_split&#92;&quot;:&#92;&quot;9&#92;&quot;,&#92;&quot;params.min_samples_leaf&#92;&quot;:&#92;&quot;7&#92;&quot;,&#92;&quot;params.criterion&#92;&quot;:&#92;&quot;gini&#92;&quot;,&#92;&quot;metrics.f1_macro&#92;&quot;:0.9458874458874459},{&#92;&quot;run_id&#92;&quot;:&#92;&quot;05e8746bec6a40e6b236b0c30e247550&#92;&quot;,&#92;&quot;params.max_depth&#92;&quot;:&#92;&quot;16&#92;&quot;,&#92;&quot;params.min_samples_split&#92;&quot;:&#92;&quot;18&#92;&quot;,&#92;&quot;params.min_samples_leaf&#92;&quot;:&#92;&quot;3&#92;&quot;,&#92;&quot;params.criterion&#92;&quot;:&#92;&quot;entropy&#92;&quot;,&#92;&quot;metrics.f1_macro&#92;&quot;:0.9458874458874459},{&#92;&quot;run_id&#92;&quot;:&#92;&quot;fddc4cfc1c4c4173b0405e709f722190&#92;&quot;,&#92;&quot;params.max_depth&#92;&quot;:&#92;&quot;13&#92;&quot;,&#92;&quot;params.min_samples_split&#92;&quot;:&#92;&quot;13&#92;&quot;,&#92;&quot;params.min_samples_leaf&#92;&quot;:&#92;&quot;6&#92;&quot;,&#92;&quot;params.criterion&#92;&quot;:&#92;&quot;entropy&#92;&quot;,&#92;&quot;metrics.f1_macro&#92;&quot;:0.9458874458874459},{&#92;&quot;run_id&#92;&quot;:&#92;&quot;0b76bf771272491d86a1d5027c72c98f&#92;&quot;,&#92;&quot;params.max_depth&#92;&quot;:&#92;&quot;19&#92;&quot;,&#92;&quot;params.min_samples_split&#92;&quot;:&#92;&quot;16&#92;&quot;,&#92;&quot;params.min_samples_leaf&#92;&quot;:&#92;&quot;7&#92;&quot;,&#92;&quot;params.criterion&#92;&quot;:&#92;&quot;entropy&#92;&quot;,&#92;&quot;metrics.f1_macro&#92;&quot;:0.9458874458874459},{&#92;&quot;run_id&#92;&quot;:&#92;&quot;701529769ed447ceabd1cd0c6744a153&#92;&quot;,&#92;&quot;params.max_depth&#92;&quot;:&#92;&quot;13&#92;&quot;,&#92;&quot;params.min_samples_split&#92;&quot;:&#92;&quot;9&#92;&quot;,&#92;&quot;params.min_samples_leaf&#92;&quot;:&#92;&quot;5&#92;&quot;,&#92;&quot;params.criterion&#92;&quot;:&#92;&quot;entropy&#92;&quot;,&#92;&quot;metrics.f1_macro&#92;&quot;:0.9458874458874459},{&#92;&quot;run_id&#92;&quot;:&#92;&quot;4ec8064901ca4a6a8ea1db2f9dfadf52&#92;&quot;,&#92;&quot;params.max_depth&#92;&quot;:&#92;&quot;16&#92;&quot;,&#92;&quot;params.min_samples_split&#92;&quot;:&#92;&quot;12&#92;&quot;,&#92;&quot;params.min_samples_leaf&#92;&quot;:&#92;&quot;4&#92;&quot;,&#92;&quot;params.criterion&#92;&quot;:&#92;&quot;entropy&#92;&quot;,&#92;&quot;metrics.f1_macro&#92;&quot;:0.9458874458874459},{&#92;&quot;run_id&#92;&quot;:&#92;&quot;fd55a35e7d5b4a25b2de6116df923b99&#92;&quot;,&#92;&quot;params.max_depth&#92;&quot;:&#92;&quot;18&#92;&quot;,&#92;&quot;params.min_samples_split&#92;&quot;:&#92;&quot;17&#92;&quot;,&#92;&quot;params.min_samples_leaf&#92;&quot;:&#92;&quot;5&#92;&quot;,&#92;&quot;params.criterion&#92;&quot;:&#92;&quot;entropy&#92;&quot;,&#92;&quot;metrics.f1_macro&#92;&quot;:0.9458874458874459},{&#92;&quot;run_id&#92;&quot;:&#92;&quot;317cde47aba84309bbef5772a9add6a0&#92;&quot;,&#92;&quot;params.max_depth&#92;&quot;:&#92;&quot;18&#92;&quot;,&#92;&quot;params.min_samples_split&#92;&quot;:&#92;&quot;14&#92;&quot;,&#92;&quot;params.min_samples_leaf&#92;&quot;:&#92;&quot;4&#92;&quot;,&#92;&quot;params.criterion&#92;&quot;:&#92;&quot;entropy&#92;&quot;,&#92;&quot;metrics.f1_macro&#92;&quot;:0.9458874458874459},{&#92;&quot;run_id&#92;&quot;:&#92;&quot;b1b5af29ca354f3985edd6e20b97686e&#92;&quot;,&#92;&quot;params.max_depth&#92;&quot;:&#92;&quot;9&#92;&quot;,&#92;&quot;params.min_samples_split&#92;&quot;:&#92;&quot;5&#92;&quot;,&#92;&quot;params.min_samples_leaf&#92;&quot;:&#92;&quot;6&#92;&quot;,&#92;&quot;params.criterion&#92;&quot;:&#92;&quot;gini&#92;&quot;,&#92;&quot;metrics.f1_macro&#92;&quot;:0.9458874458874459},{&#92;&quot;run_id&#92;&quot;:&#92;&quot;c1c56069964947e1a6bae33a7e38e772&#92;&quot;,&#92;&quot;params.max_depth&#92;&quot;:&#92;&quot;17&#92;&quot;,&#92;&quot;params.min_samples_split&#92;&quot;:&#92;&quot;2&#92;&quot;,&#92;&quot;params.min_samples_leaf&#92;&quot;:&#92;&quot;8&#92;&quot;,&#92;&quot;params.criterion&#92;&quot;:&#92;&quot;entropy&#92;&quot;,&#92;&quot;metrics.f1_macro&#92;&quot;:0.9458874458874459}]&quot;' data-total-rows='30' data-total-columns='6' data-max-columns='50' data-banner-text='&quot;&quot;' data-pagination='true' data-page-size='10' data-field-types='[[&quot;run_id&quot;,[&quot;string&quot;,&quot;object&quot;]],[&quot;params.max_depth&quot;,[&quot;string&quot;,&quot;object&quot;]],[&quot;params.min_samples_split&quot;,[&quot;string&quot;,&quot;object&quot;]],[&quot;params.min_samples_leaf&quot;,[&quot;string&quot;,&quot;object&quot;]],[&quot;params.criterion&quot;,[&quot;string&quot;,&quot;object&quot;]],[&quot;metrics.f1_macro&quot;,[&quot;number&quot;,&quot;float64&quot;]]]' data-show-filters='true' data-show-download='true' data-show-search='true' data-show-column-summaries='true' data-show-data-types='true' data-show-page-size-selector='true' data-show-column-explorer='true' data-show-chart-builder='true' data-row-headers='[]' data-hidden-columns='[]' data-has-stable-row-id='false' data-lazy='false' data-preload='false'></marimo-table></marimo-ui-element>"
+          }
+        }
+      ],
+      "console": []
+    },
+    {
+      "id": "DnEU",
+      "code_hash": "f2a0f5d57801793120e692bf719ba363",
+      "outputs": [
+        {
+          "type": "data",
+          "data": {
+            "text/markdown": "<span class=\"markdown prose dark:prose-invert contents\"><h3 id=\"picking-the-best-model\">Picking the best model</h3>\n<span class=\"paragraph\"><code>study.best_params</code> already gives us the winning hyperparameters directly from\nOptuna (no need to re-parse the MLflow table for this \u2014 Optuna tracked it as it\nwent). We retrain once more on those params and log this as its own clearly\nnamed run, and this time we also <strong>register</strong> it in the MLflow Model Registry\nwith <code>registered_model_name</code>. Registering assigns it a stable name +\nversion (<code>wine-classifier-best</code>, version 1, 2, 3...) you can refer to later\nwithout needing to remember a run id.</span></span>"
+          }
+        }
+      ],
+      "console": []
+    },
+    {
+      "id": "ulZA",
+      "code_hash": "39e0796b8864f4033ae20904d45d3ad7",
+      "outputs": [
+        {
+          "type": "data",
+          "data": {
+            "application/json": "{\"max_depth\": 15, \"min_samples_split\": 5, \"min_samples_leaf\": 8, \"criterion\": \"entropy\"}"
+          }
+        }
+      ],
+      "console": []
+    },
+    {
+      "id": "ecfG",
+      "code_hash": "7e6a0f71f818ac1c51cf71c9375a3075",
+      "outputs": [
+        {
+          "type": "data",
+          "data": {
+            "application/json": "[{\"max_depth\": 15, \"min_samples_split\": 5, \"min_samples_leaf\": 8, \"criterion\": \"entropy\"}, {\"accuracy\": \"text/plain+float:0.9444444444444444\", \"f1_macro\": \"text/plain+float:0.9458874458874459\"}]"
+          }
+        }
+      ],
+      "console": [
+        {
+          "type": "stream",
+          "name": "stderr",
+          "text": "2026/08/27 19:00:06 INFO mlflow.utils.uv_utils: Detected uv project: found uv.lock and pyproject.toml in /home/ale/projects/mlflow-tutorial\n2026/08/27 19:00:06 INFO mlflow.utils.uv_utils: Detected uv project: found uv.lock and pyproject.toml in /home/ale/projects/mlflow-tutorial\n2026/08/27 19:00:06 INFO mlflow.utils.environment: Detected uv project at /home/ale/projects/mlflow-tutorial. Attempting to export requirements via 'uv export'.\n2026/08/27 19:00:06 INFO mlflow.utils.uv_utils: Exported 110 dependencies via uv\n2026/08/27 19:00:06 INFO mlflow.utils.environment: Successfully exported 110 requirements from uv project. Skipping package capture based inference.\n2026/08/27 19:00:06 WARNING mlflow.utils.environment: Failed to resolve installed pip version. ``pip`` will be added to conda.yaml environment spec without a version specifier.\nSuccessfully registered model 'wine-classifier-best'.\nCreated version '1' of model 'wine-classifier-best'.\n",
+          "mimetype": "text/plain"
+        }
+      ]
+    },
+    {
+      "id": "Pvdt",
+      "code_hash": "73857339f9030b24c0006f15eda8e2a1",
+      "outputs": [
+        {
+          "type": "data",
+          "data": {
+            "text/markdown": "<span class=\"markdown prose dark:prose-invert contents\"><h3 id=\"baseline-vs-tuned\">Baseline vs. tuned</h3>\n<span class=\"paragraph\">Finally, a direct comparison of where we started (Section 2's fixed\n<code>max_depth=4</code> tree) versus where Optuna's search landed.</span></span>"
+          }
+        }
+      ],
+      "console": []
+    },
+    {
+      "id": "ZBYS",
+      "code_hash": "b1bd16e5184a65af299cbb42bf5634a7",
+      "outputs": [
+        {
+          "type": "data",
+          "data": {
+            "text/html": "<marimo-ui-element object-id='ZBYS-0' random-id='f52a64f0-0155-e58e-2184-7da566b45542'><marimo-table data-initial-value='[]' data-label='null' data-data='&quot;[{&#92;&quot;Index0&#92;&quot;:&#92;&quot;baseline (fixed params)&#92;&quot;,&#92;&quot;accuracy&#92;&quot;:0.9444444444444444,&#92;&quot;f1_macro&#92;&quot;:0.9458874458874459,&#92;&quot;precision_macro&#92;&quot;:0.9555555555555556,&#92;&quot;recall_macro&#92;&quot;:0.9444444444444445},{&#92;&quot;Index0&#92;&quot;:&#92;&quot;tuned (optuna best)&#92;&quot;,&#92;&quot;accuracy&#92;&quot;:0.9444444444444444,&#92;&quot;f1_macro&#92;&quot;:0.9458874458874459,&#92;&quot;precision_macro&#92;&quot;:NaN,&#92;&quot;recall_macro&#92;&quot;:NaN}]&quot;' data-total-rows='2' data-total-columns='4' data-max-columns='50' data-banner-text='&quot;&quot;' data-pagination='false' data-page-size='10' data-field-types='[[&quot;accuracy&quot;,[&quot;number&quot;,&quot;float64&quot;]],[&quot;f1_macro&quot;,[&quot;number&quot;,&quot;float64&quot;]],[&quot;precision_macro&quot;,[&quot;number&quot;,&quot;float64&quot;]],[&quot;recall_macro&quot;,[&quot;number&quot;,&quot;float64&quot;]]]' data-show-filters='true' data-show-download='true' data-show-search='true' data-show-column-summaries='false' data-show-data-types='true' data-show-page-size-selector='false' data-show-column-explorer='true' data-show-chart-builder='true' data-row-headers='[[&quot;Index0&quot;,[&quot;string&quot;,&quot;object&quot;]]]' data-hidden-columns='[]' data-has-stable-row-id='false' data-lazy='false' data-preload='false'></marimo-table></marimo-ui-element>"
+          }
+        }
+      ],
+      "console": []
+    },
+    {
+      "id": "BVLB",
+      "code_hash": "6d38a1b544e3891bff3d32f8e434bd2c",
+      "outputs": [
+        {
+          "type": "data",
+          "data": {
+            "text/markdown": "<span class=\"markdown prose dark:prose-invert contents\"><h3 id=\"use-the-test-set-to-verify-classification-with-held-out-set\">Use the test set to verify classification with held out set.</h3>\n<blockquote>\n<span class=\"paragraph\"><strong>Important</strong>: Here for the first time we use the test set that has been held out for al the training process.</span>\n</blockquote></span>"
+          }
+        }
+      ],
+      "console": []
+    },
+    {
+      "id": "zgyH",
+      "code_hash": "06781349cab1178d7810c7fcb65480b2",
+      "outputs": [
+        {
+          "type": "data",
+          "data": {
+            "application/json": "{\"accuracy\": \"text/plain+float:0.9444444444444444\", \"f1_macro\": \"text/plain+float:0.9474747474747475\"}"
+          }
+        }
+      ],
+      "console": []
+    },
+    {
+      "id": "aLJB",
+      "code_hash": "efd5169cc98054a434dedc78fc39c29c",
+      "outputs": [
+        {
+          "type": "data",
+          "data": {
+            "text/markdown": "<span class=\"markdown prose dark:prose-invert contents\"><hr />\n<span class=\"paragraph\"><strong>To view all of this visually</strong>, run, from a terminal in the same directory as\n<code>mlflow.db</code>:</span>\n<div class=\"language-bash codehilite\"><pre><span></span><code>mlflow<span class=\"w\"> </span>ui<span class=\"w\"> </span>--backend-store-uri<span class=\"w\"> </span>sqlite:///mlflow.db\n</code></pre></div>\n<span class=\"paragraph\">and open the printed <code>localhost</code> URL. You'll see the <code>wine-classification</code>\nexperiment with the baseline run, the <code>optuna_tuning_parent</code> run with all 30\ntrials nested underneath it, and <code>best_model_final</code> \u2014 each with its logged\nparams, metrics, and downloadable model artifact.</span></span>"
+          }
+        }
+      ],
+      "console": []
+    }
+  ]
+}
