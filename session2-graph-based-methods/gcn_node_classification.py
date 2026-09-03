@@ -13,8 +13,9 @@ def _():
     import torch
     import torch.nn as nn
     import torch.nn.functional as F
+    from torch_geometric.nn import GCNConv
 
-    return F, mo, nn, np, nx, plt, torch
+    return F, GCNConv, mo, nn, np, nx, plt, torch
 
 
 @app.cell(hide_code=True)
@@ -22,9 +23,7 @@ def _(mo):
     mo.md(r"""
     # Classifying papers with a Graph Convolutional Network (GCN)
 
-    The previous notebook clustered clients using *only* the graph
-    structure — no node features, no labels, nothing but "who's connected
-    to whom." A **Graph Convolutional Network** is a different animal:
+    A **Graph Convolutional Network** allows to incorporate features of each node, edges, additionally to labels:
 
     * It combines graph structure **with node features** — each node
       carries its own vector of information, not just an ID.
@@ -68,6 +67,22 @@ def _(mo):
 
 
 @app.cell
+def _(plt):
+    plt.rcParams['figure.facecolor'] = '#1a1a1a'
+    plt.rcParams['axes.facecolor'] = '#212121'
+
+    plt.rcParams['text.color'] = '#e3e1e1'       # Color of all text elements
+
+    plt.rcParams['axes.grid'] = False          # Enable the grid by default
+    plt.rcParams['grid.color'] = '#e3e1e1'   # Set the grid line color
+
+    plt.rcParams['xtick.color'] = '#e3e1e1'    # Color of x-axis tick labels and marks
+    plt.rcParams['ytick.color'] = '#e3e1e1'    # Color of y-axis tick labels and marks
+    plt.rcParams['axes.labelcolor'] = '#e3e1e1'  # Color of the overall x and y 
+    return
+
+
+@app.cell
 def _(mo):
     labels_slider = mo.ui.slider(1, 10, step=1, value=3, label="Labeled papers per topic")
     noise_slider = mo.ui.slider(0.5, 4.0, step=0.25, value=2.0, label="Feature noise (std dev)")
@@ -78,50 +93,68 @@ def _(mo):
 @app.cell
 def _(nx):
     topic_names = ["Computer Vision", "NLP", "Robotics"]
-    group_sizes = [20, 20, 20]
+    group_sizes = [20, 30, 20]
 
     G = nx.random_partition_graph(group_sizes, 0.18, 0.02, seed=0)
     true_labels_dict = {n: G.nodes[n]["block"] for n in G.nodes}
-    return G, group_sizes, topic_names, true_labels_dict
+    return G, topic_names, true_labels_dict
 
 
 @app.cell
 def _(G, np, true_labels_dict):
-    feat_dim = 8
-
     true_labels = np.array([true_labels_dict[i] for i in range(G.number_of_nodes())])
-    return feat_dim, true_labels
+    true_labels
+    return (true_labels,)
 
 
 @app.cell
-def _(feat_dim, np, noise_slider, true_labels):
+def _(noise_slider, np, true_labels):
     def make_features(labels, dim, noise_std, seed=0):
         rng = np.random.default_rng(seed)
-        centers = rng.normal(0, 1.5, size=(3, dim))
+        centers = rng.normal(0, 2, size=(3, dim))
         X = np.zeros((len(labels), dim))
         for i, lab in enumerate(labels):
             X[i] = centers[lab] + rng.normal(0, noise_std, size=dim)
         return X
 
+    feat_dim = 8
     X = make_features(true_labels, feat_dim, noise_slider.value)
-    return (X,)
+    print('Features summary')
+    print(X.shape)
+    print(X.mean(0))
+    return X, feat_dim
 
 
 @app.cell
-def _(G, np, nx):
+def _(X, feat_dim, plt):
+    for i in range(feat_dim):
+        plt.figure(figsize=(3, 3))
+        plt.hist(X[:, i],color='#71b1e9' )
+        plt.title(f'Feature {i} histogram')
+        plt.show()
+    return
+
+
+@app.cell
+def _(G, np, nx, plt):
     def normalize_adjacency(graph):
-        A = nx.to_numpy_array(graph)
-        A_hat = A + np.eye(A.shape[0])
-        degrees = A_hat.sum(axis=1)
-        D_inv_sqrt = np.diag(1.0 / np.sqrt(degrees))
+        A = nx.to_numpy_array(graph) # adjacency matrix
+        A_hat = A + np.eye(A.shape[0])  # add self adjacency
+        degrees = A_hat.sum(axis=1)  # compute degree of each node
+        D_inv_sqrt = np.diag(1.0 / np.sqrt(degrees))  # compute diagonal with normalization
         return D_inv_sqrt @ A_hat @ D_inv_sqrt
 
     A_norm = normalize_adjacency(G)
+
+    plt.matshow(A_norm)
+    plt.title('Normalized adjacency')
+    plt.colorbar()
+    plt.show()
     return (A_norm,)
 
 
 @app.cell
-def _(labels_slider, np, true_labels):
+def _(labels_slider, np, plt, true_labels):
     def pick_labeled_nodes(labels, per_class, seed=1):
         rng = np.random.default_rng(seed)
         chosen = []
@@ -133,21 +166,41 @@ def _(labels_slider, np, true_labels):
         mask[chosen] = True
         return mask
 
+    def plot_array_as_squares(arr, cmap='viridis'):
+        arr = np.asarray(arr).reshape(1, -1)
+        n = arr.shape[1]
+
+        fig, ax = plt.subplots(figsize=(n, 1.2))
+        im = ax.imshow(arr, cmap=cmap, vmin=0, vmax=1, aspect='equal')
+
+        ax.set_xticks(np.arange(n))
+        ax.set_yticks([])
+
+        # gridlines between squares
+        ax.set_xticks(np.arange(-0.5, n, 1), minor=True)
+        ax.set_yticks(np.arange(-0.5, 1, 1), minor=True)
+        ax.grid(which='minor', color='white', linewidth=2)
+        ax.tick_params(which='minor', size=0)
+
+        fig.colorbar(im, ax=ax, orientation='vertical', fraction=0.05, pad=0.02)
+        plt.tight_layout()
+        plt.show()
+
+
     train_mask = pick_labeled_nodes(true_labels, labels_slider.value)
+    plot_array_as_squares(train_mask.astype(float))
     return (train_mask,)
 
 
 @app.cell(hide_code=True)
 def _(G, feat_dim, mo, train_mask):
-    mo.md(
-        f"""
+    mo.md(f"""
     Built a citation graph with **{G.number_of_nodes()} papers**,
     **{G.number_of_edges()} citations**, and **{feat_dim}**-dimensional
     keyword features per paper. Only **{int(train_mask.sum())} of
     {G.number_of_nodes()} papers** have a known topic label — the model
     only ever sees those during training, and has to infer the rest.
-    """
-    )
+    """)
     return
 
 
@@ -159,30 +212,31 @@ def _(G, nx, plt, topic_names, train_mask, true_labels_dict):
             fig, ax = plt.subplots(figsize=(6, 5))
         pos = nx.spring_layout(G, seed=seed, k=k)
         colors = [labels_by_node[n] for n in G.nodes]
-        nx.draw_networkx_edges(G, pos, alpha=0.2, ax=ax)
+        nx.draw_networkx_edges(G, pos, alpha=0.2, ax=ax, edge_color='w')
         if mark_labeled:
             labeled_nodes = [n for n in G.nodes if train_mask[n]]
             unlabeled_nodes = [n for n in G.nodes if not train_mask[n]]
             nx.draw_networkx_nodes(
                 G, pos, nodelist=unlabeled_nodes,
                 node_color=[labels_by_node[n] for n in unlabeled_nodes],
-                cmap=plt.cm.Set2, node_size=180, ax=ax,
+                cmap=plt.cm.Set2, node_size=180, ax=ax, edgecolors='#212121'
             )
             nx.draw_networkx_nodes(
                 G, pos, nodelist=labeled_nodes,
                 node_color=[labels_by_node[n] for n in labeled_nodes],
-                cmap=plt.cm.Set2, node_size=260, edgecolors="black",
+                cmap=plt.cm.Set2, node_size=260, edgecolors="#d75d5d",
                 linewidths=1.8, ax=ax,
             )
         else:
-            nx.draw_networkx_nodes(G, pos, node_color=colors, cmap=plt.cm.Set2, node_size=200, ax=ax)
+            nx.draw_networkx_nodes(G, pos, node_color=colors, cmap=plt.cm.Set2, 
+                                   node_size=200, ax=ax, edgecolors='#212121')
         ax.set_title(title)
         ax.axis("off")
         return fig if own_fig else None
 
     fig_true = draw_topic_graph(
         true_labels_dict,
-        "True topics — " + ", ".join(topic_names) + " (bold border = labeled paper)",
+        "True topics — " + ", ".join(topic_names) + " (red border: labeled paper)",
         mark_labeled=True,
     )
     fig_true
@@ -210,7 +264,7 @@ def _(mo):
 
 
 @app.cell
-def _(A_norm, F, X, nn, torch, true_labels, train_mask):
+def _(A_norm, F, X, nn, torch, train_mask, true_labels):
     X_t = torch.tensor(X, dtype=torch.float32)
     A_t = torch.tensor(A_norm, dtype=torch.float32)
     y_t = torch.tensor(true_labels, dtype=torch.long)
@@ -251,13 +305,13 @@ def _(A_norm, F, X, nn, torch, true_labels, train_mask):
             pred = model(X_t, A_t).argmax(dim=1)
         return pred.numpy()
 
-    return GCN, MLPBaseline, train_and_predict
+    return GCN, MLPBaseline, X_t, train_and_predict, train_mask_t, y_t
 
 
 @app.cell
 def _(GCN, MLPBaseline, feat_dim, train_and_predict):
-    gcn_pred = train_and_predict(GCN(feat_dim, 8, 3))
-    mlp_pred = train_and_predict(MLPBaseline(feat_dim, 8, 3))
+    gcn_pred = train_and_predict(GCN(feat_dim, 6, 3))
+    mlp_pred = train_and_predict(MLPBaseline(feat_dim, 6, 3))
     return gcn_pred, mlp_pred
 
 
@@ -271,8 +325,7 @@ def _(gcn_pred, mlp_pred, train_mask, true_labels):
 
 @app.cell(hide_code=True)
 def _(gcn_acc, mlp_acc, mo, train_mask):
-    mo.md(
-        f"""
+    mo.md(f"""
     Checked against the **{int((~train_mask).sum())} unlabeled papers**:
 
     * **GCN accuracy: `{gcn_acc:.1%}`** — uses features *and* the citation graph
@@ -283,8 +336,7 @@ def _(gcn_acc, mlp_acc, mo, train_mask):
     in — usually the same topic, so averaging over them smooths out the
     noise. Try dragging the noise slider up in step 1 to widen the gap
     further, or turn it down until the MLP baseline catches up.
-    """
-    )
+    """)
     return
 
 
@@ -304,7 +356,106 @@ def _(G, draw_topic_graph, gcn_pred, mlp_pred, plt, true_labels_dict):
 @app.cell(hide_code=True)
 def _(mo):
     mo.md(r"""
-    ## 3. From scratch — NumPy only
+    ## 3. Library approach — PyTorch Geometric (`GCNConv`)
+
+    Same graph, same features, same labeled papers, same 2-layer
+    architecture — but now built with **PyTorch Geometric (PyG)**, the
+    standard library for graph neural networks. Two differences from the
+    hand-rolled `GCN` in step 2:
+
+    * Instead of a dense normalized adjacency matrix `A_norm`, PyG wants
+      the graph as a **sparse edge list**, `edge_index` — a `2 x num_edges`
+      tensor of `(source, target)` pairs. This is the representation real
+      GNN libraries use, since a dense $N \times N$ matrix stops being
+      practical once a graph has more than a few thousand nodes.
+    * `GCNConv` computes the $\hat{D}^{-1/2}\hat{A}\hat{D}^{-1/2}$
+      normalization (including self-loops) internally from `edge_index`,
+      so we don't precompute it by hand like we did in step 1.
+    """)
+    return
+
+
+@app.cell
+def _(G, torch):
+    edge_index = torch.tensor(
+        [[u, v] for u, v in G.edges()] + [[v, u] for u, v in G.edges()],
+        dtype=torch.long,
+    ).t().contiguous()
+    edge_index
+    return (edge_index,)
+
+
+@app.cell
+def _(F, GCNConv, X_t, edge_index, nn, torch, train_mask_t, y_t):
+    class PyGGCN(nn.Module):
+        def __init__(self, in_dim, hidden_dim, out_dim):
+            super().__init__()
+            self.conv1 = GCNConv(in_dim, hidden_dim)
+            self.conv2 = GCNConv(hidden_dim, out_dim)
+
+        def forward(self, x, edge_index):
+            h = F.relu(self.conv1(x, edge_index))
+            return self.conv2(h, edge_index)
+
+    def train_and_predict_pyg(model, epochs=200, lr=0.05):
+        torch.manual_seed(0)
+        opt = torch.optim.Adam(model.parameters(), lr=lr, weight_decay=5e-4)
+        for _ in range(epochs):
+            model.train()
+            opt.zero_grad()
+            out = model(X_t, edge_index)
+            loss = F.cross_entropy(out[train_mask_t], y_t[train_mask_t])
+            loss.backward()
+            opt.step()
+        model.eval()
+        with torch.no_grad():
+            pred = model(X_t, edge_index).argmax(dim=1)
+        return pred.numpy()
+
+    return PyGGCN, train_and_predict_pyg
+
+
+@app.cell
+def _(PyGGCN, feat_dim, train_and_predict_pyg):
+    pyg_pred = train_and_predict_pyg(PyGGCN(feat_dim, 6, 3))
+    return (pyg_pred,)
+
+
+@app.cell
+def _(pyg_pred, train_mask, true_labels):
+    pyg_acc = (pyg_pred[~train_mask] == true_labels[~train_mask]).mean()
+    return (pyg_acc,)
+
+
+@app.cell(hide_code=True)
+def _(gcn_acc, mo, pyg_acc):
+    mo.md(f"""
+    **PyTorch Geometric GCN accuracy on unlabeled papers: `{pyg_acc:.1%}`** —
+    should land in the same neighborhood as the hand-rolled PyTorch GCN
+    from step 2 (`{gcn_acc:.1%}`), since both run the same forward
+    equations; small differences come from `GCNConv`'s internal
+    normalization details rather than any real difference in approach.
+    """)
+    return
+
+
+@app.cell
+def _(G, draw_topic_graph, plt, pyg_pred, true_labels_dict):
+    fig_compare_pyg, axes_compare_pyg = plt.subplots(1, 2, figsize=(12, 5))
+    pyg_labels_dict = {n: int(pyg_pred[n]) for n in G.nodes}
+    draw_topic_graph(true_labels_dict, "True topics", ax=axes_compare_pyg[0])
+    draw_topic_graph(
+        pyg_labels_dict, "PyTorch Geometric GCN predictions", ax=axes_compare_pyg[1]
+    )
+    plt.tight_layout()
+    fig_compare_pyg
+    return
+
+
+@app.cell(hide_code=True)
+def _(mo):
+    mo.md(r"""
+    ## 4. From scratch — NumPy only
 
     The GCN forward pass is just matrix multiplication, so backpropagation
     through it is ordinary chain-rule calculus — no different in kind from
@@ -400,15 +551,13 @@ def _(scratch_pred, train_mask, true_labels):
 
 @app.cell(hide_code=True)
 def _(mo, scratch_acc):
-    mo.md(
-        f"""
+    mo.md(f"""
     **From-scratch NumPy GCN accuracy on unlabeled papers: `{scratch_acc:.1%}`** —
     both implementations run the exact same forward equations, so they
     should land in the same neighborhood as the PyTorch version above
     (small differences come from different random initializations and
     optimizers: plain gradient descent here vs. Adam there).
-    """
-    )
+    """)
     return
 
 
@@ -433,9 +582,13 @@ def _(mo):
       typically holds up much better — this is the classic argument for
       GNNs in the low-label regime that citation-network benchmarks like
       Cora were originally built to demonstrate.
-    * A real GCN library (e.g. PyTorch Geometric or DGL) would handle
-      sparse adjacency matrices, mini-batching, and many more layer types
-      — but the two-line propagation step in `GCN.forward` above is
+    * Step 3 swapped the hand-rolled `GCN.forward` for PyTorch Geometric's
+      `GCNConv`, working on a sparse edge list instead of a dense
+      adjacency matrix — and landed at essentially the same accuracy,
+      because it's the same algorithm. A real GNN library's value is
+      everything *around* that core idea: sparse adjacency at scale,
+      mini-batching, and many more layer types (GraphSAGE, GAT, ...) —
+      but the two-line propagation step in `GCN.forward` above is
       genuinely the core of it.
     """)
     return
