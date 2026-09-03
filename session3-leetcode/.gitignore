@@ -1,0 +1,20 @@
+# Virtual environments (uv automatically creates .venv)
+.venv/
+
+# Python bytecode & cache
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Distribution and builds
+dist/
+build/
+*.egg-info/
+
+# Do NOT ignore uv.lock
+# The uv.lock file tracks exact package versions and hashes.
+# It should be committed to version control for reproducible builds.
+!uv.lock
+
+# Marimo
+__marimo__
