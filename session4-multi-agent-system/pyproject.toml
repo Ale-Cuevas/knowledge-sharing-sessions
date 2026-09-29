@@ -1,0 +1,20 @@
+[project]
+name = "session4-multi-agent-system"
+version = "0.1.0"
+description = "Multi-agent system with LangChain and Hugging Face transformers"
+readme = "README.md"
+
+requires-python = ">=3.11"
+dependencies = [
+    "langchain-core>=0.3",
+    "sentencepiece>=0.2",
+    "torch>=2.4",
+    "transformers>=4.44",
+]
+
+[project.scripts]
+session4-multi-agent-system = "session4_multi_agent_system:main"
+
+[build-system]
+requires = ["uv_build>=0.12.5,<0.13.0"]
+build-backend = "uv_build"
