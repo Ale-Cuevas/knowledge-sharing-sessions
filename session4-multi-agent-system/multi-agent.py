@@ -142,7 +142,7 @@ def get_foreign_keys(conn: sqlite3.Connection) -> dict[str, set[str]]:
 
 
 # ---------------------------------------------------------------------------
-# 2. The tool (what an MCP server would expose as e.g. `run_query`)
+# 2. The tool (what an MCP srver would expose as e.g. `run_query`)
 # ---------------------------------------------------------------------------
 def run_query(conn: sqlite3.Connection, sql: str) -> list[dict]:
     """Execute a read-only SQL query and return the rows as dictionaries.
